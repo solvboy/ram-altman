@@ -17,8 +17,8 @@ using System.Windows.Forms;
 [assembly: AssemblyTitle("Ram Altman")]
 [assembly: AssemblyDescription("Parody app. Slowly fills RAM, asks consent before taking more, always leaves a reserve. Backspace quits instantly.")]
 [assembly: AssemblyProduct("Ram Altman")]
-[assembly: AssemblyCompany("solboy")]
-[assembly: AssemblyCopyright("Copyright (c) 2026 solboy. MIT License.")]
+[assembly: AssemblyCompany("solvboy")]
+[assembly: AssemblyCopyright("Copyright (c) 2026 solvboy. MIT License.")]
 [assembly: AssemblyVersion("1.0.0.0")]
 [assembly: AssemblyFileVersion("1.0.0.0")]
 
