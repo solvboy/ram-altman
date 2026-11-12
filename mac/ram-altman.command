@@ -5,7 +5,7 @@
 #
 # Run:      double-click ram-altman.command, or in Terminal: ./ram-altman.command
 # Needs:    python3 with Tk 8.6 (python.org installer, or: brew install python-tk)
-# License:  MIT, see ../LICENSE. The photo is licensed separately, see ../CREDITS.txt.
+# License:  MIT, see LICENSE. The photo is licensed separately, see CREDITS.txt.
 
 import os
 import re

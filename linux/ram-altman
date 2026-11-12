@@ -5,7 +5,7 @@
 #
 # Run:      ./ram-altman        (or: python3 ram-altman)
 # Needs:    python3 with tkinter. On Debian/Ubuntu: sudo apt install python3-tk
-# License:  MIT, see ../LICENSE. The photo is licensed separately, see ../CREDITS.txt.
+# License:  MIT, see LICENSE. The photo is licensed separately, see CREDITS.txt.
 
 import os
 import signal
