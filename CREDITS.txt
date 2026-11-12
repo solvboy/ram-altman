@@ -1,0 +1,7 @@
+sam.jpg
+  "Sam Altman CropEdit James Tamim" - photo by TechCrunch (TechCrunch Disrupt San Francisco 2019, Day 2), cropped.
+  License: Creative Commons Attribution 2.0 (CC BY 2.0) - https://creativecommons.org/licenses/by/2.0
+  Source: https://commons.wikimedia.org/wiki/File:Sam_Altman_CropEdit_James_Tamim.jpg
+  Resized to 960px wide; otherwise unchanged.
+
+Ram Altman is a parody. It is not affiliated with or endorsed by Sam Altman, OpenAI or TechCrunch.
