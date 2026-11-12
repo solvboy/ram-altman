@@ -1,0 +1,4 @@
+# The Linux script must keep Unix line endings, or its first line (#!) stops working.
+linux/ram-altman text eol=lf
+*.png binary
+*.jpg binary

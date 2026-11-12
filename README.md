@@ -2,7 +2,7 @@
 
 > "Well, you're not going to use more than 5% of it, so let me have it."
 
-A parody app for Windows. Ram Altman looks at how much RAM your computer has and politely helps himself to it.
+A parody app for Windows and Linux. Ram Altman looks at how much RAM your computer has and politely helps himself to it.
 
 ## What it does
 
@@ -31,6 +31,10 @@ No installs needed. It builds with the C# compiler that ships with Windows.
 3. Run `RamAltman.exe`.
 
 Keep `sam.jpg` next to the exe. Swap in any other image with that name to change the portrait.
+
+### Linux
+
+The [linux](linux) folder has the same app as a single executable Python script, with nothing to build. See [linux/README.md](linux/README.md).
 
 ### Antivirus note
 

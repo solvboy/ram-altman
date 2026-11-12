@@ -1,0 +1,510 @@
+#!/usr/bin/env python3
+# Ram Altman for Linux - a parody RAM "borrower".
+# One file, standard library only. No settings, cache, logs, temp files or network.
+# Nothing is ever written to disk.
+#
+# Run:      ./ram-altman        (or: python3 ram-altman)
+# Needs:    python3 with tkinter. On Debian/Ubuntu: sudo apt install python3-tk
+# License:  MIT, see ../LICENSE. The photo is licensed separately, see ../CREDITS.txt.
+
+import os
+import signal
+import sys
+import threading
+import time
+
+sys.dont_write_bytecode = True
+
+try:
+    import tkinter as tk
+    from tkinter import font as tkfont
+except ImportError:
+    sys.exit("Ram Altman needs tkinter. On Debian/Ubuntu: sudo apt install python3-tk")
+
+BACK = "#14161a"
+PANEL = "#22262c"
+LINE = "#3a404a"
+TEXT = "#e8eaed"
+DIM = "#969da8"
+ACCENT = "#10a37f"
+OTHER = "#606876"
+DANGER = "#eb6054"
+
+GIB = 1024 ** 3
+QUOTE = "“Well, you're not going to use more than 5% of it, so let me have it.”"
+
+
+def gb(n):
+    return "%.1f GB" % (n / GIB)
+
+
+def parse_meminfo(text):
+    """(total, available) in bytes from the contents of /proc/meminfo."""
+    info = {}
+    for line in text.splitlines():
+        key, _, rest = line.partition(":")
+        parts = rest.split()
+        if parts and parts[0].isdigit():
+            info[key.strip()] = int(parts[0]) * 1024
+    total = info["MemTotal"]
+    available = info.get("MemAvailable")
+    if available is None:  # kernels older than 3.14
+        available = info.get("MemFree", 0) + info.get("Buffers", 0) + info.get("Cached", 0)
+    return total, available
+
+
+def read_memory():
+    """RAM the kernel can use, and how much of it is available right now."""
+    with open("/proc/meminfo") as f:
+        return parse_meminfo(f.read())
+
+
+def installed_bytes(total):
+    """RAM physically installed (the number on the box, e.g. 32 GB), or `total` if unknown."""
+    base = "/sys/devices/system/memory"
+    try:
+        with open(base + "/block_size_bytes") as f:
+            block = int(f.read().strip(), 16)
+        online = 0
+        for name in os.listdir(base):
+            if name.startswith("memory") and name[6:].isdigit():
+                try:
+                    with open("%s/%s/online" % (base, name)) as f:
+                        online += f.read().strip() == "1"
+                except OSError:
+                    pass
+        size = block * online
+        if total <= size <= total * 1.25:
+            return size
+    except (OSError, ValueError):
+        pass
+    return total
+
+
+def panic(*_):
+    """Instant, unconditional death. No cleanup handlers, no saved state."""
+    os.kill(os.getpid(), signal.SIGKILL)
+
+
+class RamEater(threading.Thread):
+    """Loads the same file into memory over and over, at a gentle pace, until told to stop."""
+
+    CHUNK = 4 * 1024 * 1024
+
+    def __init__(self, payload_path, bytes_per_second):
+        super().__init__(daemon=True)
+        self.payload_path = payload_path
+        self.rate = max(bytes_per_second, self.CHUNK)
+        self.hoard = []
+        self.held = 0
+        self.loads = 0
+        self.refused = False
+        self._target_used = 0
+        self._max_held = 0
+        self._eating = False
+        self._restart = False
+        self._reached = False
+        self.start()
+
+    def begin(self, target_used, max_held):
+        """Eat until machine-wide usage hits target_used, never holding more than max_held ourselves."""
+        self._target_used = target_used
+        self._max_held = max_held
+        self._reached = False
+        self._restart = True
+        self._eating = True
+
+    def take_reached(self):
+        """True once (per begin) when the target has been reached."""
+        if not self._reached:
+            return False
+        self._reached = False
+        return True
+
+    def run(self):
+        started = time.monotonic()
+        session = 0
+        payload = None
+        while True:
+            if not self._eating:
+                time.sleep(0.03)
+                continue
+            if self._restart:
+                self._restart = False
+                session = 0
+                started = time.monotonic()
+
+            total, available = read_memory()
+            if total - available >= self._target_used or self.held >= self._max_held:
+                self._eating = False
+                self._reached = True
+                continue
+
+            # Pace ourselves: only allocate what the clock says we are allowed so far.
+            if session >= (time.monotonic() - started) * self.rate:
+                time.sleep(0.005)
+                continue
+
+            try:
+                if payload is None:
+                    payload = open(self.payload_path, "rb", buffering=0)
+                chunk = bytearray(self.CHUNK)
+                view = memoryview(chunk)
+                offset = 0
+                empty_reads = 0
+                while offset < self.CHUNK:
+                    n = payload.readinto(view[offset:])
+                    if not n:
+                        # Reached the end of the file: load it again from the top.
+                        payload.seek(0)
+                        self.loads += 1
+                        empty_reads += 1
+                        if empty_reads > 1:
+                            break  # empty file, nothing to load
+                        continue
+                    empty_reads = 0
+                    offset += n
+                self.hoard.append(chunk)
+                self.held += self.CHUNK
+                session += self.CHUNK
+            except (MemoryError, OSError):
+                # The kernel said no (out of memory, file vanished...). Stop where we are.
+                self.refused = True
+                self._eating = False
+                self._reached = True
+
+
+class ConsentDialog:
+    def __init__(self, app, used, held):
+        self.app = app
+        self.done = False
+        px, font = app.px, app.font
+        left_for_you = max(0, app.total - app.ceiling)
+        extra = max(0, app.ceiling - used)
+
+        win = self.win = tk.Toplevel(app.root, bg=BACK)
+        win.title("Ram Altman - Consent")
+        win.resizable(False, False)
+        w, h = px(680), px(600)
+        x = app.root.winfo_rootx() + (app.root.winfo_width() - w) // 2
+        y = app.root.winfo_rooty() + (app.root.winfo_height() - h) // 2
+        win.geometry("%dx%d+%d+%d" % (w, h, max(0, x), max(0, y)))
+        win.transient(app.root)
+        win.attributes("-topmost", True)
+        win.protocol("WM_DELETE_WINDOW", lambda: self.finish(False))
+
+        tk.Label(win, text="Would you like to go more?", fg=TEXT, bg=BACK, font=font(20, "bold"),
+                 anchor="w").place(x=px(20), y=px(14), width=px(640), height=px(34))
+        tk.Label(win, fg=DIM, bg=BACK, font=font(13), anchor="nw", justify="left", wraplength=px(640),
+                 text="I'm holding %s. Say yes and I'll take about %s more, stopping at %s in use. "
+                      "Read the fine print first." % (gb(held), gb(extra), gb(app.ceiling))
+                 ).place(x=px(20), y=px(50), width=px(640), height=px(40))
+
+        # The table: fixed header, scrolling body.
+        widths = (px(56), px(170), px(396))
+        table = tk.Frame(win, bg=PANEL)
+        table.place(x=px(20), y=px(96), width=px(640), height=px(384))
+        header = tk.Frame(table, bg=BACK)
+        header.pack(fill="x")
+        for i, name in enumerate(("No.", "Clause", "What it says")):
+            tk.Label(header, text=name, fg=DIM, bg=BACK, font=font(12), anchor="w",
+                     padx=px(8), pady=px(6)).grid(row=0, column=i, sticky="w")
+            header.grid_columnconfigure(i, minsize=widths[i])
+        body = tk.Frame(table, bg=PANEL)
+        body.pack(fill="both", expand=True)
+        canvas = tk.Canvas(body, bg=PANEL, highlightthickness=0, yscrollincrement=px(24))
+        scroll = tk.Scrollbar(body, orient="vertical", command=canvas.yview, bg=PANEL,
+                              troughcolor=BACK, activebackground=LINE, highlightthickness=0, bd=0)
+        canvas.configure(yscrollcommand=scroll.set)
+        scroll.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+        inner = self.inner = tk.Frame(canvas, bg=PANEL)
+        canvas.create_window(0, 0, window=inner, anchor="nw")
+        inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        for i in range(3):
+            inner.grid_columnconfigure(i, minsize=widths[i])
+        self.widths = widths
+        self.next_row = 0
+        win.bind("<MouseWheel>", lambda e: canvas.yview_scroll(-1 if e.delta > 0 else 1, "units"))
+        win.bind("<Button-4>", lambda e: canvas.yview_scroll(-1, "units"))
+        win.bind("<Button-5>", lambda e: canvas.yview_scroll(1, "units"))
+
+        self.section("TERMS AND CONDITIONS")
+        self.row("1", "The loan", "You lend Ram Altman more of this computer's memory. It is borrowed, not consumed.")
+        self.row("2", "The 5% doctrine", "\"You're not going to use more than 5% of it.\" This is a sales pitch, not a measurement.")
+        self.row("3", "Hard stop", "Total memory in use will not be pushed past %s. About %s always stays yours."
+                 % (gb(app.ceiling), gb(left_for_you)))
+        self.row("4", "Revocation", "Press Backspace at any time. The app dies instantly and Linux takes every byte back.")
+        self.row("5", "Returns", "Closing the window also returns 100% of the RAM. There is nothing to uninstall or undo.")
+        self.row("6", "Side effects", "Other programs may slow down and Linux may start swapping while I hold your RAM. Save your work before agreeing.")
+        self.row("7", "Warranty", "None. This is a joke app, provided as is.")
+        self.row("8", "Parody", "Not affiliated with, endorsed by, or connected to Sam Altman or OpenAI.")
+
+        self.section("PRIVACY POLICY")
+        self.row("9", "Data collected", "None.")
+        self.row("10", "Files written", "None. No settings, cache, logs or temp files. Every launch is a first launch.")
+        self.row("11", "Network", "Never used. There is no networking code in this app.")
+        self.row("12", "What I read", "How much RAM you have, and one file (%s) loaded again and again as filler." % app.payload_name)
+        self.row("13", "After exit", "Nothing of mine remains. Your shell may keep the command in its history; that is not mine to control.")
+
+        self.section("RAM BUDGET")
+        self.row("14", "Installed", "%s (%s usable by Linux)" % (gb(app.installed), gb(app.total)))
+        self.row("15", "In use right now", "%s, of which I hold %s" % (gb(used), gb(held)))
+        self.row("16", "If you consent", "I take about %s more, slowly." % gb(extra))
+        self.row("17", "Ceiling", "%s in use, machine-wide" % gb(app.ceiling))
+        self.row("18", "Left for you", gb(left_for_you))
+
+        self.agreed = tk.BooleanVar(win, False)
+        tk.Checkbutton(win, text="I have read the above and I consent to Ram Altman taking more RAM.",
+                       variable=self.agreed, command=self.toggle, fg=TEXT, bg=BACK, selectcolor=PANEL,
+                       activebackground=BACK, activeforeground=TEXT, highlightthickness=0, bd=0,
+                       font=font(13), anchor="w").place(x=px(20), y=px(490), width=px(640), height=px(28))
+
+        tk.Label(win, text="Backspace = instant shutdown", fg=DANGER, bg=BACK, font=font(13),
+                 anchor="w").place(x=px(20), y=px(540), width=px(280), height=px(38))
+        self.enough = self.button("No, that's enough", PANEL, lambda: self.finish(False))
+        self.enough.place(x=px(336), y=px(540), width=px(160), height=px(38))
+        self.more = self.button("Take more", PANEL, lambda: self.finish(True))
+        self.more.configure(state="disabled")
+        self.more.place(x=px(506), y=px(540), width=px(154), height=px(38))
+
+        win.after(80, self.grab)
+
+    def button(self, text, color, command):
+        return tk.Button(self.win, text=text, command=command, bg=color, fg=TEXT, activebackground=color,
+                         activeforeground=TEXT, disabledforeground=DIM, relief="flat", bd=0,
+                         highlightthickness=1, highlightbackground=LINE, font=self.app.font(13))
+
+    def cell(self, text, column, span, fg, bg, weight):
+        pad = self.app.px(8)
+        width = sum(self.widths[column:column + span])
+        tk.Label(self.inner, text=text, fg=fg, bg=bg, font=self.app.font(13, weight), anchor="nw",
+                 justify="left", wraplength=width - 2 * pad, padx=pad, pady=self.app.px(7)
+                 ).grid(row=self.next_row, column=column, columnspan=span, sticky="nsew")
+
+    def end_row(self):
+        tk.Frame(self.inner, bg=LINE, height=1).grid(row=self.next_row + 1, column=0, columnspan=3, sticky="ew")
+        self.next_row += 2
+
+    def row(self, number, clause, says):
+        for column, text in enumerate((number, clause, says)):
+            self.cell(text, column, 1, TEXT, PANEL, "normal")
+        self.end_row()
+
+    def section(self, name):
+        self.cell("", 0, 1, ACCENT, BACK, "bold")
+        self.cell(name, 1, 2, ACCENT, BACK, "bold")
+        self.end_row()
+
+    def toggle(self):
+        on = self.agreed.get()
+        color = ACCENT if on else PANEL
+        self.more.configure(state="normal" if on else "disabled", bg=color, activebackground=color)
+
+    def grab(self):
+        try:
+            self.win.grab_set()
+            self.win.focus_set()
+        except tk.TclError:
+            pass
+
+    def finish(self, yes):
+        if self.done:
+            return
+        self.done = True
+        self.win.destroy()
+        self.app.answer(yes)
+
+
+class App:
+    DETECTING, EATING_TO_ASK, AWAITING_CONSENT, EATING_TO_CEILING, FULL, DECLINED, REFUSED = range(7)
+
+    def __init__(self, root):
+        self.root = root
+        self.scale = max(1.0, root.winfo_fpixels("1i") / 96.0)
+        self.family = tkfont.nametofont("TkDefaultFont").actual("family")
+        self.fonts = {}
+        self.dialog = None
+        self.phase = self.DETECTING
+        self.started = time.monotonic()
+
+        total, available = read_memory()
+        self.total = total
+        self.installed = installed_bytes(total)
+
+        # Leave room: one eighth of the machine (32 GB -> stop at 28 GB), and never less than 2 GB.
+        reserve = max(self.installed // 8, 2 * GIB)
+        self.ceiling = max(0, min(self.installed - reserve, total - reserve // 2))
+        self.ask_at = min(int(total * 0.55), self.ceiling)
+        # Runaway guard on our own share. Slack covers other programs shrinking while we grow,
+        # so the machine-wide ceiling is normally what stops us.
+        self.max_held = min(self.ceiling, max(0, self.ceiling - (total - available) + reserve // 2))
+
+        here = os.path.dirname(os.path.abspath(__file__))
+        portrait_path = None
+        for name in ("sam.png", "sam.gif"):
+            candidate = os.path.join(here, name)
+            if os.path.isfile(candidate) and os.path.getsize(candidate) > 0:
+                portrait_path = candidate
+                break
+        payload_path = portrait_path or os.path.abspath(__file__)
+        self.payload_name = os.path.basename(payload_path)
+
+        px = self.px
+        root.title("Ram Altman")
+        root.configure(bg=BACK)
+        root.resizable(False, False)
+        w, h = px(460), px(632)
+        root.geometry("%dx%d+%d+%d" % (w, h, (root.winfo_screenwidth() - w) // 2,
+                                       max(0, (root.winfo_screenheight() - h) // 2 - px(20))))
+        root.attributes("-topmost", True)
+        root.protocol("WM_DELETE_WINDOW", panic)  # closing is the same as panicking
+        root.bind_all("<BackSpace>", panic)
+
+        self.portrait = tk.Canvas(root, bg=PANEL, highlightthickness=0)
+        self.portrait.place(x=px(130), y=px(22), width=px(200), height=px(200))
+        self.draw_portrait(portrait_path)
+
+        self.label("RAM ALTMAN", 14, ACCENT, weight="bold").place(x=px(20), y=px(228), width=px(420), height=px(24))
+        self.label(QUOTE, 17, TEXT, PANEL, slant="italic", wrap=390).place(x=px(20), y=px(258), width=px(420), height=px(78))
+
+        self.installed_label = self.label()
+        self.used_label = self.label()
+        self.held_label = self.label("", 14, ACCENT, weight="bold")
+        self.file_label = self.label("", 13, DIM)
+        for i, widget in enumerate((self.installed_label, self.used_label, self.held_label, self.file_label)):
+            widget.place(x=px(20), y=px(352 + 26 * i), width=px(420), height=px(24))
+
+        self.bar = tk.Canvas(root, bg=BACK, highlightthickness=0)
+        self.bar.place(x=px(20), y=px(466), width=px(420), height=px(46))
+
+        self.status_label = self.label("", 13, TEXT, wrap=420)
+        self.status_label.place(x=px(20), y=px(520), width=px(420), height=px(44))
+
+        self.label("PANIC BUTTON: Backspace. Instant shutdown, nothing saved, ever.", 13, DANGER, PANEL
+                   ).place(x=0, y=px(588), width=px(460), height=px(44))
+
+        # About half a percent of the machine per second: slow enough to watch.
+        self.eater = RamEater(payload_path, total // 200)
+        self.tick()
+
+    def px(self, value):
+        return int(round(value * self.scale))
+
+    def font(self, size, weight="normal", slant="roman"):
+        key = (size, weight, slant)
+        if key not in self.fonts:
+            self.fonts[key] = tkfont.Font(family=self.family, size=-self.px(size), weight=weight, slant=slant)
+        return self.fonts[key]
+
+    def label(self, text="", size=13, fg=TEXT, bg=BACK, weight="normal", slant="roman", wrap=None):
+        return tk.Label(self.root, text=text, fg=fg, bg=bg, font=self.font(size, weight, slant),
+                        justify="center", wraplength=self.px(wrap) if wrap else 0)
+
+    def draw_portrait(self, path):
+        size = self.px(200)
+        canvas = self.portrait
+        self.image = None
+        if path:
+            try:
+                image = tk.PhotoImage(file=path)
+                smallest = min(image.width(), image.height())
+                if smallest >= 2 * size:
+                    image = image.subsample(smallest // size)
+                elif size >= 2 * smallest:
+                    image = image.zoom(size // smallest)
+                self.image = image  # keep a reference or Tk drops the picture
+            except tk.TclError:
+                self.image = None
+        if self.image:
+            canvas.create_image(size // 2, size // 2, image=self.image)
+        else:
+            canvas.create_oval(size * 0.33, size * 0.20, size * 0.67, size * 0.58, fill=LINE, outline="")
+            canvas.create_oval(size * 0.12, size * 0.64, size * 0.88, size * 1.44, fill=LINE, outline="")
+            canvas.create_text(size // 2, size - self.px(14), text="put sam.png next to ram-altman",
+                               fill=TEXT, font=self.font(11))
+        canvas.create_rectangle(1, 1, size - 1, size - 1, outline=ACCENT, width=2)
+
+    def draw_bar(self, used, held):
+        """One bar for the whole machine: everything else | Ram Altman's share | free, with both limits marked."""
+        canvas = self.bar
+        canvas.delete("all")
+        w, bar_h = self.px(420), self.px(27)
+        held = min(held, used)
+        x_other = w * (used - held) / self.total
+        x_used = w * min(used, self.total) / self.total
+        canvas.create_rectangle(0, 0, w, bar_h, fill=PANEL, outline="")
+        canvas.create_rectangle(0, 0, x_other, bar_h, fill=OTHER, outline="")
+        canvas.create_rectangle(x_other, 0, x_used, bar_h, fill=ACCENT, outline="")
+        for at, text, color in ((self.ask_at, "ask first", TEXT), (self.ceiling, "hard stop", DANGER)):
+            x = min(w - 1, w * at / self.total)
+            canvas.create_line(x, 0, x, bar_h + 2, fill=color, width=2)
+            half = self.font(11).measure(text) / 2
+            canvas.create_text(max(half, min(w - half, x)), bar_h + self.px(10), text=text, fill=color,
+                               font=self.font(11))
+
+    def tick(self):
+        self.root.after(100, self.tick)
+        total, available = read_memory()
+        used = total - available
+        held = self.eater.held
+
+        self.installed_label.configure(text="Your computer has %s of RAM" % gb(self.installed))
+        self.used_label.configure(text="In use right now: %s  (%d%%)" % (gb(used), round(100.0 * used / self.total)))
+        self.held_label.configure(text="Ram Altman is holding %s" % gb(held))
+        self.file_label.configure(text="Loaded %s %s times" % (self.payload_name, format(self.eater.loads, ",")))
+        self.draw_bar(used, held)
+
+        phase = self.phase
+        if phase == self.DETECTING:
+            status = "Counting your RAM..."
+            if time.monotonic() - self.started > 2.5:
+                self.phase = self.EATING_TO_ASK
+                self.eater.begin(self.ask_at, self.max_held)
+        elif phase == self.EATING_TO_ASK:
+            status = "Loading %s again. And again. And again." % self.payload_name
+            if self.eater.take_reached():
+                if self.eater.refused:
+                    self.phase = self.REFUSED
+                elif self.ceiling - self.ask_at < 64 * 1024 * 1024:
+                    self.phase = self.FULL
+                else:
+                    self.phase = self.AWAITING_CONSENT
+                    self.dialog = ConsentDialog(self, used, held)
+        elif phase == self.AWAITING_CONSENT:
+            status = "I'd like more. Waiting for your consent."
+        elif phase == self.EATING_TO_CEILING:
+            status = "Consent received. Scaling up."
+            if self.eater.take_reached():
+                self.phase = self.REFUSED if self.eater.refused else self.FULL
+        elif phase == self.FULL:
+            status = ("That's my limit. I left you %s. Close the window to get it all back."
+                      % gb(max(0, self.total - self.ceiling)))
+        elif phase == self.DECLINED:
+            status = "Fine. I'll just hold on to what I've got.\nClose the window to get it back."
+        else:
+            status = "Linux won't give me any more. Holding here."
+        self.status_label.configure(text=status)
+
+    def answer(self, yes):
+        self.dialog = None
+        if yes:
+            self.phase = self.EATING_TO_CEILING
+            self.eater.begin(self.ceiling, self.max_held)
+        else:
+            self.phase = self.DECLINED
+
+
+def main():
+    if not sys.platform.startswith("linux"):
+        sys.exit("This is the Linux version of Ram Altman. On Windows, use RamAltman.exe.")
+    try:
+        root = tk.Tk()
+    except tk.TclError as error:
+        sys.exit("Ram Altman needs a graphical desktop: %s" % error)
+    App(root)
+    root.mainloop()
+
+
+if __name__ == "__main__":
+    main()
