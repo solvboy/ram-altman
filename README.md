@@ -16,6 +16,8 @@ Get the package for your system from the [latest release](https://github.com/sol
 
 Each version lives in its own folder with its own instructions: [windows](windows), [linux](linux), [mac](mac).
 
+> **Known issue on macOS:** macOS blocks the downloaded app and says it could not verify that it is free of malware. This happens because the app is not signed with a paid Apple developer account, not because anything was found. See [mac/README.md](mac/README.md) for how to open it.
+
 ## What it does
 
 1. Shows the portrait, the quote, and how much RAM you have.

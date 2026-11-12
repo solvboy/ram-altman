@@ -2,11 +2,23 @@
 
 The same app as the Windows version, as one executable Python script. Nothing to build or install.
 
+## Known issue: macOS blocks it as unverified
+
+When the package is downloaded through a browser, macOS refuses to open `ram-altman.command` and says it could not verify that the file is free of malware.
+
+This is macOS Gatekeeper blocking software that is not signed with a paid Apple developer account. It has not found anything wrong with the app, and the whole program is this one readable file. The app is not signed, so this warning is expected for now.
+
+To open it anyway (only needed once):
+
+1. Double-click `ram-altman.command` so that macOS blocks it.
+2. Open **System Settings → Privacy & Security** and scroll down to the Security section.
+3. Click **Open Anyway** next to the message about `ram-altman.command`.
+
+On macOS 15 and later, right-clicking the file and choosing Open no longer gets past this.
+
 ## Run it
 
 Double-click `ram-altman.command` in Finder. A Terminal window opens and starts the app.
-
-If macOS says it "cannot be opened because it is from an unidentified developer", right-click the file, choose **Open**, then **Open** again. That is only needed the first time.
 
 Or from Terminal, in this folder:
 
