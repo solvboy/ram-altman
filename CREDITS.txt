@@ -4,7 +4,7 @@ sam.jpg
   Source: https://commons.wikimedia.org/wiki/File:Sam_Altman_CropEdit_James_Tamim.jpg
   Resized to 960px wide; otherwise unchanged.
 
-linux/sam.png
+linux/sam.png, mac/sam.png
   The same photo, same license and source, resized to 200x200 and converted to PNG.
 
 Ram Altman is a parody. It is not affiliated with or endorsed by Sam Altman, OpenAI or TechCrunch.
