@@ -1,5 +1,6 @@
 # The Linux and Mac scripts must keep Unix line endings, or its first line (#!) stops working.
 linux/ram-altman text eol=lf
 mac/ram-altman.command text eol=lf
+*.exe binary
 *.png binary
 *.jpg binary

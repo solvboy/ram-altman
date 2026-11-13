@@ -8,7 +8,7 @@ Double-click `RamAltman.exe`. Keep `sam.jpg` in the same folder; swap in any oth
 
 ## Build it yourself
 
-No installs needed. It builds with the C# compiler that ships with Windows.
+`RamAltman.exe` in this folder is ready to run. To rebuild it from the source, no installs are needed: it builds with the C# compiler that ships with Windows.
 
 1. Double-click `build.bat`.
 2. Run the `RamAltman.exe` it creates.

@@ -6,7 +6,7 @@ The same app as the Windows version, as one executable Python script. Nothing to
 
 When the package is downloaded through a browser, macOS refuses to open `ram-altman.command` and says it could not verify that the file is free of malware.
 
-This is macOS Gatekeeper blocking software that is not signed with a paid Apple developer account. It has not found anything wrong with the app, and the whole program is this one readable file. The app is not signed, so this warning is expected for now.
+This is macOS Gatekeeper blocking software that is not signed with a paid Apple developer account. It has not found anything wrong with the app, and the whole program is this one readable file. The app is not signed, so this warning is expected for now. It is tracked as a bug in [issue #1](https://github.com/solvboy/ram-altman/issues/1).
 
 To open it anyway (only needed once):
 

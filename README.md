@@ -16,7 +16,7 @@ Get the package for your system from the [latest release](https://github.com/sol
 
 Each version lives in its own folder with its own instructions: [windows](windows), [linux](linux), [mac](mac).
 
-> **Known issue on macOS:** macOS blocks the downloaded app and says it could not verify that it is free of malware. This happens because the app is not signed with a paid Apple developer account, not because anything was found. See [mac/README.md](mac/README.md) for how to open it.
+> **Known issue on macOS:** macOS blocks the downloaded app and says it could not verify that it is free of malware. This happens because the app is not signed with a paid Apple developer account, not because anything was found. See [mac/README.md](mac/README.md) for how to open it. Tracked in [issue #1](https://github.com/solvboy/ram-altman/issues/1).
 
 ## What it does
 

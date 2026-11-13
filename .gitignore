@@ -1,6 +1,3 @@
-# Built by windows/build.bat
-windows/RamAltman.exe
-
 # Release packages built by package.py
 dist/
 
