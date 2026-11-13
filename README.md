@@ -6,9 +6,12 @@ A parody app for Windows, Linux and macOS. Ram Altman looks at how much RAM your
 
 ## Screenshots
 
-| Filling up | Asking for consent | At the ceiling |
-| :---: | :---: | :---: |
-| <img src="screenshots/eating.png" width="210" alt="Ram Altman slowly filling memory"> | <img src="screenshots/consent.png" width="326" alt="The consent dialog with terms, privacy policy and RAM budget"> | <img src="screenshots/ceiling.png" width="210" alt="Ram Altman stopped at the hard ceiling"> |
+<p align="center">
+  <img src="screenshots/eating.png" width="220" alt="Ram Altman slowly filling memory">
+  <img src="screenshots/consent.png" width="326" alt="The consent dialog with terms, privacy policy and RAM budget">
+  <img src="screenshots/ceiling.png" width="220" alt="Ram Altman stopped at the hard ceiling">
+</p>
+<p align="center"><em>Filling up, asking for consent, and stopped at the ceiling.</em></p>
 
 ## Download
 
