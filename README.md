@@ -4,6 +4,12 @@
 
 A parody app for Windows, Linux and macOS. Ram Altman looks at how much RAM your computer has and politely helps himself to it.
 
+## Screenshots
+
+| Filling up | Asking for consent | At the ceiling |
+| :---: | :---: | :---: |
+| <img src="screenshots/eating.png" width="210" alt="Ram Altman slowly filling memory"> | <img src="screenshots/consent.png" width="326" alt="The consent dialog with terms, privacy policy and RAM budget"> | <img src="screenshots/ceiling.png" width="210" alt="Ram Altman stopped at the hard ceiling"> |
+
 ## Download
 
 Get the package for your system from the [latest release](https://github.com/solvboy/ram-altman/releases/latest):
